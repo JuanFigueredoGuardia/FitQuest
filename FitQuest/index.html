@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FitQuest - Gamifica tu Entrenamiento</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .glass-card {
+        background: rgba(30, 30, 30, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .loader {
+        border-top-color: #ff9157;
+        animation: spinner 0.6s linear infinite;
+      }
+      @keyframes spinner {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .hidden { display: none !important; }
+    </style>
+  </head>
+  <body class="bg-black text-white font-body selection:bg-orange-500 selection:text-black">
+    <div id="app" class="min-h-screen flex flex-col">
+      
+      <!-- Logo y Header Inicial (Visible solo si cargando o auth) -->
+      <header id="main-header" class="fixed top-0 w-full z-50 bg-black/80 backdrop-blur-md px-6 py-4 flex justify-between items-center hidden">
+        <div class="flex items-center gap-2">
+          <span class="text-orange-500 font-extrabold text-2xl italic font-headline tracking-tighter">FitQuest</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <button id="btn-share-app" class="text-white/60 hover:text-orange-500 active:scale-95 transition-transform flex items-center gap-1">
+            <span class="material-symbols-outlined text-xl">share</span>
+          </button>
+          <div id="user-avatar-btn" class="w-10 h-10 rounded-full border-2 border-orange-500 overflow-hidden cursor-pointer active:scale-95 transition-transform">
+            <img id="header-avatar" src="" alt="Perfil" class="w-full h-full object-cover rounded-full" />
+          </div>
+        </div>
+      </header>
+
+      <!-- Pantalla de Carga -->
+      <div id="screen-loading" class="flex-1 flex flex-col items-center justify-center gap-4">
+        <div class="loader w-12 h-12 border-4 border-white/20 rounded-full"></div>
+        <p class="text-white/60 font-medium animate-pulse">Cargando tu leyenda...</p>
+      </div>
+
+      <!-- Pantalla de Auth -->
+      <main id="screen-auth" class="flex-1 flex flex-col items-center justify-center px-6 gap-8 hidden">
+        <div class="text-center">
+          <h1 class="text-6xl font-black italic tracking-tighter text-orange-500 mb-2">FitQuest</h1>
+          <p class="text-white/60 text-lg">Convierte cada entrenamiento en una misión.</p>
+        </div>
+        <button id="btn-login" class="bg-orange-500 hover:bg-orange-400 text-black font-black py-4 px-8 rounded-full flex items-center gap-3 transition-all active:scale-95 shadow-lg">
+          <span class="material-symbols-outlined">account_circle</span>
+          Entrar con Google
+        </button>
+      </main>
+
+      <!-- Pantalla Principal (App) -->
+      <main id="screen-app" class="flex-1 flex flex-col pt-24 px-6 pb-32 hidden">
+        
+        <!-- Vista: Dashboard (Objetivos) -->
+        <section id="view-dashboard" class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div class="flex flex-col items-center">
+            <div class="relative w-48 h-48 flex items-center justify-center">
+              <svg class="w-full h-full -rotate-90">
+                <circle cx="96" cy="96" r="88" class="stroke-white/5 fill-transparent" stroke-width="12"></circle>
+                <circle id="progress-circle" cx="96" cy="96" r="88" class="stroke-orange-500 fill-transparent" stroke-width="12" stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="553" style="transition: stroke-dashoffset 1s ease-out"></circle>
+              </svg>
+              <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span id="display-level" class="text-4xl font-black">Nivel 1</span>
+                <span id="display-xp" class="text-white/60 font-bold text-sm">0 XP</span>
+              </div>
+            </div>
+            <div id="display-range-badge" class="mt-6 px-4 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 font-black text-xs uppercase tracking-widest">
+              Bronce
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <h2 class="text-2xl font-black italic">Tus Misiones</h2>
+              <div class="flex items-center gap-3">
+                <button id="btn-clear-completed" class="text-white/20 hover:text-red-500 text-xs font-bold transition-colors hidden">Limpiar completados</button>
+                <button id="btn-add-exercise" class="text-orange-500 flex items-center gap-1 font-bold active:scale-95 transition-transform">
+                  <span class="material-symbols-outlined">add</span> Nueva
+                </button>
+              </div>
+            </div>
+            <div id="exercise-list" class="space-y-3">
+              <!-- Lista de ejercicios vía JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Vista: Ranking -->
+        <section id="view-ranking" class="space-y-6 hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <h2 class="text-4xl font-black italic tracking-tighter text-orange-500">Ranking Global</h2>
+          <div id="ranking-list" class="space-y-4">
+            <!-- Ranking vía JS -->
+          </div>
+        </section>
+
+        <!-- Vista: Logros -->
+        <section id="view-achievements" class="space-y-6 hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <h2 class="text-4xl font-black italic tracking-tighter text-orange-500">Tus Logros</h2>
+          <div id="achievements-list" class="grid grid-cols-1 gap-4">
+            <!-- Logros vía JS -->
+          </div>
+        </section>
+
+        <!-- Vista: Perfil -->
+        <section id="view-profile" class="space-y-8 hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <h2 class="text-4xl font-black italic tracking-tighter text-orange-500 text-center">Tu Perfil</h2>
+          <div class="flex flex-col items-center gap-6">
+            <div class="w-32 h-32 rounded-full border-4 border-orange-500 p-1 relative">
+              <img id="profile-avatar" src="" alt="Avatar" class="w-full h-full object-cover rounded-full" />
+              <div class="absolute -bottom-2 -right-2 bg-orange-500 text-black px-2 py-0.5 rounded-full text-[10px] font-black uppercase">Vip</div>
+            </div>
+            
+            <div class="w-full space-y-2">
+              <label class="text-xs font-black uppercase text-white/40 tracking-widest ml-1">Nombre del Atleta</label>
+              <div class="glass-card p-4 rounded-2xl flex items-center gap-3">
+                <span class="material-symbols-outlined text-orange-500">edit</span>
+                <input id="input-display-name" type="text" class="bg-transparent border-none focus:ring-0 w-full text-lg font-bold p-0" placeholder="Escribe tu nombre..." />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 w-full">
+              <div class="glass-card p-4 rounded-2xl">
+                <span class="text-[10px] font-black uppercase text-white/40 block mb-1">Racha Actual</span>
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-orange-500" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+                  <span id="display-streak" class="text-2xl font-black">0 días</span>
+                </div>
+              </div>
+              <div class="glass-card p-4 rounded-2xl text-center flex flex-col justify-center">
+                <span id="display-range-text" class="text-orange-500 font-bold text-lg leading-tight uppercase">BRONCE</span>
+                <span class="text-[10px] font-black uppercase text-white/40">Rango</span>
+              </div>
+            </div>
+
+            <div class="w-full pt-4 space-y-4">
+              <button id="btn-save-profile" class="w-full bg-orange-500 text-black font-black py-4 rounded-full shadow-lg active:scale-95 transition-transform uppercase tracking-widest">
+                Guardar Leyenda
+              </button>
+              <button id="btn-logout" class="w-full text-white/40 font-bold text-sm active:scale-95 transition-transform">
+                Cerrar Sesión
+              </button>
+              <button id="btn-delete-account" class="w-full text-red-500/60 font-bold text-xs uppercase tracking-tighter active:scale-95 transition-transform">
+                Borrar Cuenta permanentemente
+              </button>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Navegación Inferior -->
+      <nav id="bottom-nav" class="fixed bottom-8 left-1/2 -translate-x-1/2 w-[95%] max-w-sm glass-card rounded-full p-2 flex justify-around items-center z-50 hidden">
+        <button data-view="dashboard" class="nav-item p-3 text-white/40 hover:text-orange-500 transition-colors">
+          <span class="material-symbols-outlined text-2xl">dashboard</span>
+        </button>
+        <button data-view="ranking" class="nav-item p-3 text-white/40 hover:text-orange-500 transition-colors">
+          <span class="material-symbols-outlined text-2xl">leaderboard</span>
+        </button>
+        <button data-view="achievements" class="nav-item p-3 text-white/40 hover:text-orange-500 transition-colors">
+          <span class="material-symbols-outlined text-2xl">emoji_events</span>
+        </button>
+        <button data-view="profile" class="nav-item p-3 text-white/40 hover:text-orange-500 transition-colors">
+          <span class="material-symbols-outlined text-2xl">person</span>
+        </button>
+      </nav>
+
+      <!-- Modales -->
+      <div id="modal-container" class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm hidden">
+        
+        <!-- Modal: Confirmación Personalizada -->
+        <div id="modal-confirm" class="glass-card w-full max-w-sm rounded-[2.5rem] p-8 flex flex-col items-center text-center border-red-500/30 hidden">
+          <div class="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mb-6">
+            <span class="material-symbols-outlined text-3xl">warning</span>
+          </div>
+          <h3 id="confirm-title" class="text-2xl font-black italic text-white mb-2">¿Estás seguro?</h3>
+          <p id="confirm-message" class="text-white/60 mb-8 font-medium text-sm">Esta acción no se puede deshacer.</p>
+          <div class="flex flex-col gap-3 w-full">
+            <button id="btn-modal-confirm-action" class="bg-red-500 text-white font-black py-4 rounded-full uppercase tracking-widest active:scale-95 transition-transform shadow-lg shadow-red-500/20 text-sm">Confirmar</button>
+            <button id="btn-modal-confirm-cancel" class="text-white/40 font-bold p-2 hover:text-white transition-colors text-sm">Cancelar</button>
+          </div>
+        </div>
+
+        <!-- Nuevo Rango -->
+        <div id="modal-new-range" class="glass-card w-full max-w-sm rounded-[2.5rem] p-8 flex flex-col items-center text-center border-orange-500/30 hidden">
+          <div class="w-24 h-24 bg-orange-500 rounded-full flex items-center justify-center mb-6 shadow-2xl shadow-orange-500/40">
+            <span class="material-symbols-outlined text-black text-5xl" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+          </div>
+          <h2 class="text-3xl font-black italic text-orange-500 mb-2 underline overline decoration-black">¡NUEVO RANGO!</h2>
+          <p id="new-range-message" class="text-white/60 mb-8 font-medium">Has ascendido a <span id="span-range-name" class="text-white font-bold">PLATA</span>. ¡Sigue así, guerrero!</p>
+          <button id="btn-close-modal" class="w-full bg-orange-500 text-black font-black py-4 rounded-full uppercase tracking-widest active:scale-95 transition-transform">Ver Perfil</button>
+        </div>
+
+        <!-- Nueva Misión -->
+        <div id="modal-new-mission" class="glass-card w-full max-w-sm rounded-[2.5rem] p-8 flex flex-col items-center text-center border-orange-500/30 hidden">
+          <h3 class="text-2xl font-black italic text-orange-500 mb-6">Nueva Misión</h3>
+          <input id="input-mission-title" type="text" class="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold mb-6 focus:ring-orange-500 focus:border-orange-500" placeholder="Ej: Correr 5km, Pecho..." />
+          <div class="flex flex-col gap-3 w-full">
+            <button id="btn-confirm-mission" class="bg-orange-500 text-black font-black py-4 rounded-full uppercase tracking-widest active:scale-95 transition-transform">Desplegar</button>
+            <button id="btn-cancel-mission" class="text-white/40 font-bold p-2">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+

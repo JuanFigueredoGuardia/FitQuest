@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "User": {
+      "title": "Usuario de FitQuest",
+      "description": "Perfil del usuario con estadísticas de progreso y gamificación.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "description": "Nombre visible del usuario" },
+        "photoURL": { "type": "string", "description": "URL de la foto de perfil" },
+        "xp": { "type": "number", "description": "Puntos de experiencia acumulados" },
+        "level": { "type": "number", "description": "Nivel actual basado en XP" },
+        "streak": { "type": "number", "description": "Días seguidos de actividad" },
+        "range": { "type": "string", "description": "Rango actual (Bronce, Plata, Oro, Platino, LEYENDA FIT)" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "xp", "level", "range"]
+    },
+    "Exercise": {
+      "title": "Objetivo de Ejercicio",
+      "description": "Un objetivo creado por el usuario para completar.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "ID del usuario dueño del ejercicio" },
+        "title": { "type": "string", "description": "Descripción del ejercicio" },
+        "completed": { "type": "boolean", "description": "Estado de finalización" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "completed"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Datos de perfil y progreso del usuario."
+    },
+    "/exercises/{exerciseId}": {
+      "schema": "Exercise",
+      "description": "Colección global de ejercicios/objetivos de los usuarios."
+    }
+  }
+}
