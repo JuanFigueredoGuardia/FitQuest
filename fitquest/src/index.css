@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --font-headline: "Lexend", sans-serif;
+  --font-body: "Inter", sans-serif;
+  
+  --color-primary: #ff9157;
+  --color-primary-container: #ff7a2c;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
+}
