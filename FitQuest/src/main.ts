@@ -3,7 +3,10 @@ import {
   getAuth, 
   onAuthStateChanged, 
   GoogleAuthProvider, 
-  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult,
+  signInAnonymously,
+  linkWithRedirect,
   signOut,
   deleteUser,
   setPersistence,
@@ -25,7 +28,8 @@ import {
   addDoc, 
   deleteDoc, 
   serverTimestamp,
-  getDocFromServer
+  getDocFromServer,
+  writeBatch
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import './index.css';
@@ -67,7 +71,9 @@ const elements = {
   confirmTitle: document.getElementById('confirm-title')!,
   confirmMessage: document.getElementById('confirm-message')!,
   btnModalConfirmAction: document.getElementById('btn-modal-confirm-action')!,
-  inputMissionTitle: document.getElementById('input-mission-title') as HTMLInputElement
+  inputMissionTitle: document.getElementById('input-mission-title') as HTMLInputElement,
+  guestWarning: document.getElementById('guest-warning')!,
+  btnLinkGoogle: document.getElementById('btn-link-google')!
 };
 
 // Inicialización de Firebase con manejo de errores
@@ -78,9 +84,10 @@ try {
   console.log('Intentando inicializar Firebase...');
   app = initializeApp(firebaseConfig);
   
-  // Forzamos Long Polling para evitar errores 'offline' en entornos de red específicos
+  // Forzamos Long Polling para asegurar conexión en entornos con proxies/restricciones
   db = initializeFirestore(app, {
     experimentalForceLongPolling: true,
+    experimentalAutoDetectLongPolling: false // Obligamos a usar Long Polling siempre
   });
   
   auth = getAuth(app);
@@ -181,19 +188,20 @@ function hideModals() {
 async function initializeUser(user: any) {
   try {
     const userRef = doc(db, 'users', user.uid);
-    // Intentamos obtener el usuario del servidor para confirmar permisos
+    // Intentamos obtener el usuario del servidor
     const userSnap = await getDocFromServer(userRef).catch(() => getDoc(userRef));
 
     if (!userSnap.exists()) {
       console.log('Creando nuevo usuario en Firestore...');
-      const initialXP = 500;
+      const initialXP = user.isAnonymous ? 100 : 500; // Menos XP inicial para invitados
       const initialData = {
-        displayName: user.displayName || 'Atleta Anónimo',
-        photoURL: user.photoURL || '',
+        displayName: user.isAnonymous ? 'Atleta Invitado' : (user.displayName || 'Guerrero Fit'),
+        photoURL: user.isAnonymous ? 'https://picsum.photos/seed/guest/100/100' : (user.photoURL || ''),
         xp: initialXP,
         level: Math.floor(initialXP / 1000) + 1,
-        range: 'Bronce',
+        range: getRange(initialXP),
         streak: 0,
+        isGuest: user.isAnonymous,
         updatedAt: serverTimestamp()
       };
       await setDoc(userRef, initialData);
@@ -532,6 +540,13 @@ async function deleteAccount() {
 function updateUI() {
   if (!currentUserData) return;
 
+  const isGuest = auth.currentUser?.isAnonymous;
+  if (isGuest) {
+    elements.guestWarning.classList.remove('hidden');
+  } else {
+    elements.guestWarning.classList.add('hidden');
+  }
+
   elements.headerAvatar.src = currentUserData.photoURL || '';
   elements.profileAvatar.src = currentUserData.photoURL || '';
   elements.displayLevel.innerText = `Nivel ${currentUserData.level}`;
@@ -555,6 +570,27 @@ function updateUI() {
 
 onAuthStateChanged(auth, async (user) => {
   console.log('Estado de Auth cambiado:', user ? 'Sesión activa' : 'Sin sesión');
+
+  // Capturamos el resultado de una redirección (por si falla o para limpiar flag de invitado)
+  try {
+    const result = await getRedirectResult(auth);
+    if (result && result.user && !result.user.isAnonymous) {
+      // Si veníamos de una vinculación exitosa, actualizamos Firestore
+      const userRef = doc(db, 'users', result.user.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists() && userSnap.data().isGuest) {
+        await updateDoc(userRef, {
+          isGuest: false,
+          displayName: result.user.displayName || userSnap.data().displayName,
+          photoURL: result.user.photoURL || userSnap.data().photoURL,
+          updatedAt: serverTimestamp()
+        });
+        alert('¡Cuenta vinculada con éxito!');
+      }
+    }
+  } catch (err: any) {
+    handleAuthError(err);
+  }
   
   if (user) {
     try {
@@ -601,30 +637,14 @@ const loginAction = async () => {
   const btn = document.getElementById('btn-login') as HTMLButtonElement;
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<div class="loader w-5 h-5 border-2 border-black/20 rounded-full inline-block mr-2 align-middle"></div> Entrando...';
+    btn.innerHTML = '<div class="loader w-5 h-5 border-2 border-black/20 rounded-full inline-block mr-2 align-middle"></div> redireccionando...';
   }
 
-  console.log('Iniciando Login...');
   try {
-    const result = await signInWithPopup(auth, provider);
-    console.log('Login exitoso para:', result.user.displayName);
+    // Usamos Redirect en lugar de Popup
+    await signInWithRedirect(auth, provider);
   } catch (err: any) {
-    console.error('Error de popup:', err);
-    if (err.code === 'auth/popup-blocked') {
-      alert('⚠️ VENTANA BLOQUEADA: Tu navegador impidió abrir el login de Google. Por favor, pulsa en el icono de candado o estrella en la barra de direcciones y permite las "ventanas emergentes" para este sitio.');
-    } else if (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user') {
-      console.log('El usuario cerró la ventana de autenticación.');
-    } else if (err.code === 'auth/configuration-not-found') {
-      alert('⚠️ ERROR DE CONFIGURACIÓN:\n\nDebes activar el servicio de Autenticación en tu consola de Firebase:\n\n1. Ve a "Authentication"\n2. Haz clic en "Comenzar"\n3. Activa "Google" en Sign-in Methods.');
-    } else if (err.code === 'auth/unauthorized-domain') {
-      const domain = window.location.hostname;
-      alert(`⚠️ DOMINIO NO AUTORIZADO:\n\nDebes autorizar este dominio en la consola de Firebase para que el login funcione:\n\n1. Ve a "Authentication"\n2. Haz clic en "Settings" (Configuración)\n3. Ve a "Authorized domains" (Dominios autorizados)\n4. Añade este dominio: ${domain}`);
-    } else if (err.code === 'auth/network-request-failed') {
-      alert('Error de red: Revisa tu conexión a internet e inténtalo de nuevo.');
-    } else {
-      alert('Error crítico al entrar: ' + err.message);
-    }
-  } finally {
+    handleAuthError(err);
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<span class="material-symbols-outlined">account_circle</span> Entrar con Google';
@@ -632,7 +652,62 @@ const loginAction = async () => {
   }
 };
 
+const guestLoginAction = async () => {
+  const btn = document.getElementById('btn-guest') as HTMLButtonElement;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<div class="loader w-5 h-5 border-2 border-white/20 rounded-full inline-block mr-2 align-middle"></div> entrando...';
+  }
+
+  try {
+    await signInAnonymously(auth);
+    console.log('Entrada como invitado exitosa');
+  } catch (err: any) {
+    console.error('Error al entrar como invitado:', err);
+    if (err.code === 'auth/admin-restricted-operation') {
+      alert('⚠️ MODO INVITADO DESACTIVADO:\n\nDebes activar el "Inicio de sesión anónimo" en tu consola de Firebase:\n\n1. Ve a Authentication\n2. Sign-in method\n3. Añadir nuevo proveedor -> Anónimo\n4. Activar y Guardar.');
+    } else {
+      alert('Error al entrar como invitado: ' + err.message);
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-symbols-outlined text-xl">person_outline</span> Probar como Invitado';
+    }
+  }
+};
+
+const linkGoogleAction = async () => {
+  try {
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    // Vinculamos usando redirección
+    await linkWithRedirect(user, provider);
+  } catch (err: any) {
+    console.error('Error al vincular cuenta:', err);
+    if (err.code === 'auth/credential-already-in-use') {
+      alert('Esta cuenta de Google ya está vinculada a otro perfil de FitQuest.');
+    } else {
+      handleAuthError(err);
+    }
+  }
+};
+
+function handleAuthError(err: any) {
+  console.error('Error de Auth:', err);
+  if (err.code === 'auth/popup-blocked') {
+    alert('⚠️ VENTANA BLOQUEADA: Tu navegador impidió abrir el login. Por favor, permite las ventanas emergentes.');
+  } else if (err.code === 'auth/unauthorized-domain') {
+    alert(`⚠️ DOMINIO NO AUTORIZADO: Debes añadir ${window.location.hostname} en Firebase Console.`);
+  } else {
+    alert('Error: ' + err.message);
+  }
+}
+
 document.getElementById('btn-login')?.addEventListener('click', loginAction);
+document.getElementById('btn-guest')?.addEventListener('click', guestLoginAction);
+elements.btnLinkGoogle?.addEventListener('click', linkGoogleAction);
 document.getElementById('btn-logout')?.addEventListener('click', () => signOut(auth));
 document.getElementById('btn-add-exercise')?.addEventListener('click', () => showModal('mission'));
 document.getElementById('btn-clear-completed')?.addEventListener('click', clearCompletedExercises);

@@ -57,14 +57,30 @@
           <h1 class="text-6xl font-black italic tracking-tighter text-orange-500 mb-2">FitQuest</h1>
           <p class="text-white/60 text-lg">Convierte cada entrenamiento en una misión.</p>
         </div>
-        <button id="btn-login" class="bg-orange-500 hover:bg-orange-400 text-black font-black py-4 px-8 rounded-full flex items-center gap-3 transition-all active:scale-95 shadow-lg">
-          <span class="material-symbols-outlined">account_circle</span>
-          Entrar con Google
-        </button>
+        <div class="flex flex-col gap-3 w-full">
+          <button id="btn-login" class="bg-orange-500 hover:bg-orange-400 text-black font-black py-4 px-8 rounded-full flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg w-full">
+            <span class="material-symbols-outlined">account_circle</span>
+            Entrar con Google
+          </button>
+          <button id="btn-guest" class="bg-white/5 hover:bg-white/10 text-white/60 font-bold py-4 px-8 rounded-full flex items-center justify-center gap-3 transition-all active:scale-95 w-full">
+            <span class="material-symbols-outlined text-xl">person_outline</span>
+            Probar como Invitado
+          </button>
+        </div>
+        <p class="text-[10px] text-white/20 uppercase tracking-widest font-bold">No requiere correo</p>
       </main>
 
       <!-- Pantalla Principal (App) -->
       <main id="screen-app" class="flex-1 flex flex-col pt-24 px-6 pb-32 hidden">
+        
+        <!-- Banner de Invitado -->
+        <div id="guest-warning" class="mb-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-center justify-between hidden">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-orange-500 text-sm">info</span>
+            <p class="text-[10px] font-bold text-orange-500/80 uppercase">Modo Invitado: Los datos se borrarán pronto.</p>
+          </div>
+          <button id="btn-link-google" class="text-[9px] font-black bg-orange-500 text-black px-2 py-1 rounded-lg uppercase">Guardar</button>
+        </div>
         
         <!-- Vista: Dashboard (Objetivos) -->
         <section id="view-dashboard" class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
