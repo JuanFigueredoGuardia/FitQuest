@@ -4,6 +4,7 @@ import {
   onAuthStateChanged, 
   GoogleAuthProvider, 
   signInWithRedirect, 
+  signInWithPopup,
   getRedirectResult,
   signInAnonymously,
   linkWithRedirect,
@@ -73,7 +74,10 @@ const elements = {
   btnModalConfirmAction: document.getElementById('btn-modal-confirm-action')!,
   inputMissionTitle: document.getElementById('input-mission-title') as HTMLInputElement,
   guestWarning: document.getElementById('guest-warning')!,
-  btnLinkGoogle: document.getElementById('btn-link-google')!
+  btnLinkGoogle: document.getElementById('btn-link-google')!,
+  checkReminders: document.getElementById('check-reminders') as HTMLInputElement,
+  reminderSettings: document.getElementById('reminder-settings')!,
+  inputReminderTime: document.getElementById('input-reminder-time') as HTMLInputElement
 };
 
 // Inicialización de Firebase con manejo de errores
@@ -144,9 +148,17 @@ function getLevel(xp: number) {
 
 function switchView(viewName: string) {
   Object.keys(views).forEach(key => {
-    (views as any)[key].classList.add('hidden');
+    const v = (views as any)[key];
+    v.classList.add('hidden');
+    v.classList.remove('animate-slide-up');
   });
-  (views as any)[viewName].classList.remove('hidden');
+  
+  const targetView = (views as any)[viewName];
+  targetView.classList.remove('hidden');
+  // Usamos un pequeño timeout para asegurar que el navegador registre el cambio y dispare la animación
+  requestAnimationFrame(() => {
+    targetView.classList.add('animate-slide-up');
+  });
   
   // Actualizar Bottom Nav
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -186,14 +198,20 @@ function hideModals() {
 // --- Operaciones de Datos ---
 
 async function initializeUser(user: any) {
+  const userRef = doc(db, 'users', user.uid);
+  
+  // Timeout de 4 segundos para la carga inicial de datos del usuario
+  const fetchPromise = getDoc(userRef);
+  const timeoutPromise = new Promise((_, reject) => 
+    setTimeout(() => reject(new Error('timeout')), 4000)
+  );
+
   try {
-    const userRef = doc(db, 'users', user.uid);
-    // Intentamos obtener el usuario del servidor
-    const userSnap = await getDocFromServer(userRef).catch(() => getDoc(userRef));
+    const userSnap: any = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!userSnap.exists()) {
       console.log('Creando nuevo usuario en Firestore...');
-      const initialXP = user.isAnonymous ? 100 : 500; // Menos XP inicial para invitados
+      const initialXP = user.isAnonymous ? 100 : 500;
       const initialData = {
         displayName: user.isAnonymous ? 'Atleta Invitado' : (user.displayName || 'Guerrero Fit'),
         photoURL: user.isAnonymous ? 'https://picsum.photos/seed/guest/100/100' : (user.photoURL || ''),
@@ -202,17 +220,29 @@ async function initializeUser(user: any) {
         range: getRange(initialXP),
         streak: 0,
         isGuest: user.isAnonymous,
+        remindersEnabled: false,
+        reminderTime: '09:00',
         updatedAt: serverTimestamp()
       };
       await setDoc(userRef, initialData);
-      console.log('¡Perfil creado!');
+      currentUserData = initialData; // Optimista
+    } else {
+      currentUserData = userSnap.data();
     }
   } catch (err: any) {
-    console.error('Error en initializeUser:', err);
-    if (err.code === 'permission-denied') {
-      throw new Error('PERMISOS_DENEGADOS: Tu base de datos tiene las reglas bloqueadas.');
+    console.warn('Carga de perfil lenta o offline, procediendo con datos básicos:', err.message);
+    // Si falla o tarda, creamos un objeto básico para no bloquear el inicio
+    if (!currentUserData) {
+      currentUserData = {
+        displayName: user.displayName || 'Guerrero Fit',
+        photoURL: user.photoURL || '',
+        xp: 500,
+        level: 1,
+        range: 'Bronce',
+        streak: 0,
+        isGuest: user.isAnonymous
+      };
     }
-    throw err;
   }
 }
 
@@ -248,14 +278,15 @@ function syncExercises(user: any) {
     currentExercises = [];
     let hasCompleted = false;
 
-    snapshot.forEach((docSnap) => {
+    snapshot.docs.forEach((docSnap, index) => {
       const exercise = docSnap.data();
       const id = docSnap.id;
       currentExercises.push({ id, ...exercise });
       if (exercise.completed) hasCompleted = true;
       
       const item = document.createElement('div');
-      item.className = 'glass-card p-5 rounded-2xl flex items-center justify-between animate-in fade-in zoom-in duration-300';
+      const delay = index < 5 ? `delay-${(index + 1) * 100}` : '';
+      item.className = `glass-card p-5 rounded-2xl flex items-center justify-between animate-slide-up card-hover ${delay} ${exercise.completed ? 'opacity-40' : ''}`;
       item.innerHTML = `
         <div class="flex items-center gap-4">
           <button class="check-btn w-6 h-6 rounded-full border-2 border-orange-500/50 flex items-center justify-center transition-all ${exercise.completed ? 'bg-orange-500 border-orange-500' : ''}">
@@ -303,13 +334,14 @@ function syncRanking() {
   
   const unsub = onSnapshot(q, (snapshot) => {
     elements.rankingList.innerHTML = '';
-    let rank = 1;
-    snapshot.forEach((doc) => {
+    snapshot.docs.forEach((doc, index) => {
       const user = doc.data();
       const isMe = auth.currentUser?.uid === doc.id;
+      const rank = index + 1;
       
       const item = document.createElement('div');
-      item.className = `glass-card p-4 rounded-2xl flex items-center gap-4 ${isMe ? 'border-orange-500/50 bg-orange-500/5' : ''}`;
+      const delay = rank <= 5 ? `delay-${rank * 100}` : '';
+      item.className = `glass-card p-4 rounded-2xl flex items-center gap-4 animate-slide-up card-hover ${delay} ${isMe ? 'border-orange-500/50 bg-orange-500/5' : ''}`;
       item.innerHTML = `
         <span class="w-6 font-black text-xs text-white/20">${rank}</span>
         <img src="${user.photoURL || 'https://via.placeholder.com/40'}" class="w-10 h-10 rounded-full object-cover bg-white/10" />
@@ -323,7 +355,6 @@ function syncRanking() {
         </div>
       `;
       elements.rankingList.appendChild(item);
-      rank++;
     });
   }, (err) => {
     console.warn('Listener de Ranking interrumpido:', err.message);
@@ -382,9 +413,10 @@ function updateAchievements() {
   ];
 
   elements.achievementsList.innerHTML = '';
-  achievements.forEach(ach => {
+  achievements.forEach((ach, index) => {
     const card = document.createElement('div');
-    card.className = `glass-card p-4 rounded-2xl flex items-center gap-4 transition-all ${ach.condition ? 'border-orange-500/40 bg-orange-500/5' : 'opacity-40 grayscale'}`;
+    const delay = index < 5 ? `delay-${(index + 1) * 100}` : '';
+    card.className = `glass-card p-4 rounded-2xl flex items-center gap-4 transition-all animate-slide-up card-hover ${delay} ${ach.condition ? 'border-orange-500/40 bg-orange-500/5' : 'opacity-40 grayscale'}`;
     card.innerHTML = `
       <div class="w-12 h-12 rounded-xl flex items-center justify-center ${ach.condition ? 'bg-orange-500 text-black' : 'bg-white/10 text-white/40'}">
         <span class="material-symbols-outlined text-2xl" style="${ach.condition ? "font-variation-settings: 'FILL' 1;" : ''}">${ach.icon}</span>
@@ -503,6 +535,8 @@ async function saveProfile() {
   
   await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
     displayName: newName,
+    remindersEnabled: elements.checkReminders.checked,
+    reminderTime: elements.inputReminderTime.value,
     updatedAt: serverTimestamp()
   });
   alert('¡Perfil actualizado, leyenda!');
@@ -535,6 +569,22 @@ async function deleteAccount() {
   );
 }
 
+async function logoutWithConfirm() {
+  showModal(
+    'confirm',
+    '¿CERRAR SESIÓN?',
+    'Tu progreso actual está a salvo, pero tendrás que entrar de nuevo para jugar.',
+    async () => {
+      try {
+        await signOut(auth);
+        hideModals();
+      } catch (err) {
+        console.error('Error al cerrar sesión:', err);
+      }
+    }
+  );
+}
+
 // --- UI Updates ---
 
 function updateUI() {
@@ -556,6 +606,15 @@ function updateUI() {
   elements.displayStreak.innerText = `${currentUserData.streak} días`;
   elements.inputDisplayName.value = currentUserData.displayName;
 
+  // Actualizar Recordatorios
+  elements.checkReminders.checked = !!currentUserData.remindersEnabled;
+  elements.inputReminderTime.value = currentUserData.reminderTime || '09:00';
+  if (currentUserData.remindersEnabled) {
+    elements.reminderSettings.classList.remove('hidden');
+  } else {
+    elements.reminderSettings.classList.add('hidden');
+  }
+
   // Actualizar círculo de progreso (XP hacia el siguiente nivel)
   const xpInLevel = currentUserData.xp % 1000;
   const percentage = xpInLevel / 1000;
@@ -568,91 +627,137 @@ function updateUI() {
 
 // --- Auth Handling ---
 
-onAuthStateChanged(auth, async (user) => {
-  console.log('Estado de Auth cambiado:', user ? 'Sesión activa' : 'Sin sesión');
+let authInitialized = false;
 
-  // Capturamos el resultado de una redirección (por si falla o para limpiar flag de invitado)
-  try {
-    const result = await getRedirectResult(auth);
-    if (result && result.user && !result.user.isAnonymous) {
-      // Si veníamos de una vinculación exitosa, actualizamos Firestore
-      const userRef = doc(db, 'users', result.user.uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists() && userSnap.data().isGuest) {
-        await updateDoc(userRef, {
-          isGuest: false,
-          displayName: result.user.displayName || userSnap.data().displayName,
-          photoURL: result.user.photoURL || userSnap.data().photoURL,
-          updatedAt: serverTimestamp()
-        });
-        alert('¡Cuenta vinculada con éxito!');
+if (auth) {
+  // Manejo de resultados de redirección antes de onAuthStateChanged para mayor rapidez
+  getRedirectResult(auth)
+    .then(async (result) => {
+      if (result && result.user && !result.user.isAnonymous) {
+        const userRef = doc(db, 'users', result.user.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists() && userSnap.data().isGuest) {
+          await updateDoc(userRef, {
+            isGuest: false,
+            displayName: result.user.displayName || userSnap.data().displayName,
+            photoURL: result.user.photoURL || userSnap.data().photoURL,
+            updatedAt: serverTimestamp()
+          });
+          alert('¡Cuenta vinculada con éxito!');
+        }
       }
-    }
-  } catch (err: any) {
-    handleAuthError(err);
-  }
-  
-  if (user) {
-    try {
-      // Intentamos inicializar los datos del usuario antes de quitar la pantalla de carga
-      await initializeUser(user);
-      syncUserData(user);
-      syncExercises(user);
-      syncRanking();
+    })
+    .catch((err) => {
+      if (err.code !== 'auth/unauthorized-domain') handleAuthError(err);
+    });
+
+  onAuthStateChanged(auth, async (user) => {
+    console.log('Estado de Auth cambiado:', user ? 'Sesión activa' : 'Sin sesión');
+    authInitialized = true;
+
+    if (user) {
+      // Primero mostramos la UI básica con una transición suave
+      screens.loading.classList.add('animate-fade-out');
+      screens.auth.classList.add('animate-fade-out');
       
-      // Una vez todo listo, mostramos la App
-      screens.loading.classList.add('hidden');
-      screens.auth.classList.add('hidden');
-      screens.app.classList.remove('hidden');
-      elements.header.classList.remove('hidden');
-      elements.bottomNav.classList.remove('hidden');
-      switchView('dashboard');
-    } catch (err: any) {
-      console.error('Error crítico en Auth Flow:', err);
-      
+      setTimeout(() => {
+        screens.loading.classList.add('hidden');
+        screens.auth.classList.add('hidden');
+        screens.app.classList.remove('hidden');
+        screens.app.classList.add('animate-fade-in');
+        elements.header.classList.remove('hidden');
+        elements.header.classList.add('animate-slide-up');
+        elements.bottomNav.classList.remove('hidden');
+        elements.bottomNav.classList.add('animate-slide-up');
+        switchView('dashboard');
+      }, 300);
+
+      try {
+        // Luego cargamos los datos reales en segundo plano (pero rápido)
+        await initializeUser(user);
+        updateUI(); // Refrescar con lo que hayamos cargado
+        
+        syncUserData(user);
+        syncExercises(user);
+        syncRanking();
+      } catch (err: any) {
+        console.error('Error cargando datos en segundo plano:', err);
+      }
+    } else {
+      clearListeners();
       screens.loading.classList.add('hidden');
       screens.auth.classList.remove('hidden');
-
-      let msg = err.message;
-      if (msg.includes('PERMISOS_DENEGADOS')) {
-        alert('⚠️ ERROR DE PERMISOS:\n\nFirebase ha denegado el acceso. Por favor, asegúrate de haber pegado las REGLAS (Rules) en tu consola de Firebase y haber pulsado "PUBLISH".');
-      } else {
-        alert('⚠️ Error al cargar perfil: ' + msg);
-      }
+      screens.app.classList.add('hidden');
+      elements.header.classList.add('hidden');
+      elements.bottomNav.classList.add('hidden');
     }
-  } else {
-    // Si no hay sesión, vamos directo al login
-    clearListeners();
-    screens.loading.classList.add('hidden');
-    screens.auth.classList.remove('hidden');
-    screens.app.classList.add('hidden');
-    elements.header.classList.add('hidden');
-    elements.bottomNav.classList.add('hidden');
-  }
-});
+  });
+} else {
+  // Si auth no se inicializó
+  setTimeout(() => {
+    screens.loading?.classList.add('hidden');
+    screens.auth?.classList.remove('hidden');
+  }, 1000);
+}
 
 // --- Event Listeners ---
 
 const loginAction = async () => {
+  if (!auth) return alert('Firebase no se pudo inicializar. Revisa tu conexión.');
+  
   const btn = document.getElementById('btn-login') as HTMLButtonElement;
+  const isInIframe = window.self !== window.top;
+
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<div class="loader w-5 h-5 border-2 border-black/20 rounded-full inline-block mr-2 align-middle"></div> redireccionando...';
+    btn.innerHTML = '<div class="loader w-5 h-5 border-2 border-black/20 border-t-black rounded-full inline-block mr-2 align-middle"></div> Conectando...';
   }
 
-  try {
-    // Usamos Redirect en lugar de Popup
-    await signInWithRedirect(auth, provider);
-  } catch (err: any) {
-    handleAuthError(err);
-    if (btn) {
+  // Prevenimos esperas infinitas con un timeout de 15s
+  const authTimeout = setTimeout(() => {
+    if (btn && btn.disabled) {
       btn.disabled = false;
       btn.innerHTML = '<span class="material-symbols-outlined">account_circle</span> Entrar con Google';
+      alert('⚠️ El inicio de sesión está tardando demasiado. Por favor, intenta abrir la App en una pestaña nueva (icono ↗️ arriba).');
     }
+  }, 15000);
+
+  try {
+    // Si estamos en un iframe, sugerimos abrir en pestaña nueva para evitar bloqueos
+    if (isInIframe) {
+      console.warn('Iframe detectado. El inicio de sesión puede fallar.');
+    }
+
+    // Intentamos Popup
+    await signInWithPopup(auth, provider);
+    clearTimeout(authTimeout);
+  } catch (err: any) {
+    clearTimeout(authTimeout);
+    console.warn('Fallo en Auth:', err.code);
+
+    if (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.code === 'auth/network-request-failed') {
+      try {
+        if (btn) btn.innerHTML = '<div class="loader w-5 h-5 border-2 border-black/20 border-t-black rounded-full inline-block mr-2 align-middle"></div> Redireccionando...';
+        await signInWithRedirect(auth, provider);
+      } catch (redirErr: any) {
+        handleAuthError(redirErr);
+      }
+    } else if (err.code !== 'auth/cancelled-closure-interaction') {
+      handleAuthError(err);
+    }
+  } finally {
+    setTimeout(() => {
+      if (btn && !auth?.currentUser) {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined">account_circle</span> Entrar con Google';
+      }
+    }, 2000);
   }
 };
 
 const guestLoginAction = async () => {
+  if (!auth) return alert('No se pudo inicializar Firebase. Revisa tu conexión.');
+
   const btn = document.getElementById('btn-guest') as HTMLButtonElement;
   if (btn) {
     btn.disabled = true;
@@ -661,13 +766,12 @@ const guestLoginAction = async () => {
 
   try {
     await signInAnonymously(auth);
-    console.log('Entrada como invitado exitosa');
   } catch (err: any) {
     console.error('Error al entrar como invitado:', err);
     if (err.code === 'auth/admin-restricted-operation') {
-      alert('⚠️ MODO INVITADO DESACTIVADO:\n\nDebes activar el "Inicio de sesión anónimo" en tu consola de Firebase:\n\n1. Ve a Authentication\n2. Sign-in method\n3. Añadir nuevo proveedor -> Anónimo\n4. Activar y Guardar.');
+      alert('⚠️ MODO INVITADO DESACTIVADO:\n\nDebes activar el "Inicio de sesión anónimo" en tu consola de Firebase.');
     } else {
-      alert('Error al entrar como invitado: ' + err.message);
+      alert('Error: ' + err.message);
     }
   } finally {
     if (btn) {
@@ -696,19 +800,25 @@ const linkGoogleAction = async () => {
 
 function handleAuthError(err: any) {
   console.error('Error de Auth:', err);
+  const domain = window.location.hostname;
+  
   if (err.code === 'auth/popup-blocked') {
-    alert('⚠️ VENTANA BLOQUEADA: Tu navegador impidió abrir el login. Por favor, permite las ventanas emergentes.');
+    alert('⚠️ VENTANA BLOQUEADA: El navegador bloqueó el inicio de sesión. Por favor, permite las ventanas emergentes o usa el botón ↗️ arriba para abrir la app en una pestaña nueva.');
   } else if (err.code === 'auth/unauthorized-domain') {
-    alert(`⚠️ DOMINIO NO AUTORIZADO: Debes añadir ${window.location.hostname} en Firebase Console.`);
+    alert(`⚠️ DOMINIO NO AUTORIZADO\n\nFirebase no permite el login desde "${domain}".\n\nPARA ARREGLARLO:\n1. Ve a Firebase Console -> Authentication -> Settings -> Authorized Domains.\n2. Añade este dominio: ${domain}`);
+  } else if (err.code === 'auth/network-request-failed') {
+    alert(`⚠️ ERROR DE RED / BLOQUEO:\n\nEsto suele pasar porque el visualizador de AI Studio bloquea la conexión segura de Google.\n\nSOLUCIÓN:\n1. Haz clic en el icono ↗️ (esquina superior derecha) para abrir la App en una pestaña nueva.\n2. Asegúrate de que "${domain}" esté en Dominios Autorizados de Firebase.`);
+  } else if (err.code === 'auth/cancelled-closure-interaction') {
+    console.log('Login cancelado por el usuario');
   } else {
-    alert('Error: ' + err.message);
+    alert('Error: ' + (err.message || 'Error desconocido de autenticación'));
   }
 }
 
 document.getElementById('btn-login')?.addEventListener('click', loginAction);
 document.getElementById('btn-guest')?.addEventListener('click', guestLoginAction);
 elements.btnLinkGoogle?.addEventListener('click', linkGoogleAction);
-document.getElementById('btn-logout')?.addEventListener('click', () => signOut(auth));
+document.getElementById('btn-logout')?.addEventListener('click', logoutWithConfirm);
 document.getElementById('btn-add-exercise')?.addEventListener('click', () => showModal('mission'));
 document.getElementById('btn-clear-completed')?.addEventListener('click', clearCompletedExercises);
 document.getElementById('btn-share-app')?.addEventListener('click', shareApp);
@@ -719,6 +829,71 @@ document.getElementById('btn-close-modal')?.addEventListener('click', () => {
   switchView('profile');
 });
 document.getElementById('btn-save-profile')?.addEventListener('click', saveProfile);
+
+elements.checkReminders?.addEventListener('change', (e) => {
+  const enabled = (e.target as HTMLInputElement).checked;
+  if (enabled) {
+    elements.reminderSettings.classList.remove('hidden');
+    requestNotificationPermission();
+  } else {
+    elements.reminderSettings.classList.add('hidden');
+  }
+});
+
+// --- Sistema de Notificaciones ---
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    console.warn('Este navegador no soporta notificaciones de escritorio.');
+    return;
+  }
+
+  if (Notification.permission === 'default') {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      console.log('Permiso de notificaciones concedido.');
+    }
+  }
+}
+
+function sendNotification(title: string, body: string) {
+  if (Notification.permission === 'granted') {
+    new Notification(title, {
+      body,
+      icon: '/favicon.ico' // O un logo de la app si tuviéramos
+    });
+  } else {
+    console.warn('Las notificaciones no están habilitadas o permitidas.');
+  }
+}
+
+let lastNotificationTime: string | null = null;
+
+function checkReminders() {
+  if (!currentUserData || !currentUserData.remindersEnabled || !currentUserData.reminderTime) return;
+
+  const now = new Date();
+  const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+  if (currentTime === currentUserData.reminderTime && lastNotificationTime !== currentTime) {
+    lastNotificationTime = currentTime;
+    
+    // Solo notificar si hay misiones pendientes
+    const pendingMissions = currentExercises.filter(e => !e.completed).length;
+    if (pendingMissions > 0) {
+      sendNotification(
+        '⚔️ ¡Misión Crítica!', 
+        `Tienes ${pendingMissions} misiones pendientes hoy. ¡No rompas tu racha!`
+      );
+    }
+  }
+}
+
+// Check cada minuto
+setInterval(checkReminders, 60000);
+// Primer check inmediato
+setTimeout(checkReminders, 5000);
+
 document.getElementById('btn-delete-account')?.addEventListener('click', () => deleteAccount());
 document.getElementById('btn-modal-confirm-cancel')?.addEventListener('click', hideModals);
 document.getElementById('btn-modal-confirm-action')?.addEventListener('click', async () => {

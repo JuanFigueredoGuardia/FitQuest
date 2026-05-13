@@ -11,6 +11,8 @@
         "level": { "type": "number", "description": "Nivel actual basado en XP" },
         "streak": { "type": "number", "description": "Días seguidos de actividad" },
         "range": { "type": "string", "description": "Rango actual (Bronce, Plata, Oro, Platino, LEYENDA FIT)" },
+        "remindersEnabled": { "type": "boolean", "description": "Si el usuario tiene activados los recordatorios" },
+        "reminderTime": { "type": "string", "description": "Hora del recordatorio en formato HH:mm" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["displayName", "xp", "level", "range"]

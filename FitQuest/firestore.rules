@@ -21,28 +21,32 @@ service cloud.firestore {
         && data.level is number && data.level >= 1
         && data.range is string && data.range.size() <= 50
         && (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1000))
-        && data.keys().hasAll(['displayName', 'xp', 'level', 'range', 'streak', 'updatedAt'])
-        && data.keys().size() >= 6;
+        && (data.remindersEnabled == null || data.remindersEnabled is bool)
+        && (data.reminderTime == null || (data.reminderTime is string && data.reminderTime.size() <= 10))
+        && data.keys().hasAll(['displayName', 'xp', 'level', 'range', 'streak', 'updatedAt']);
     }
 
     function isValidExercise(data) {
       return data.userId is string && data.userId == request.auth.uid
         && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
         && data.completed is bool
-        && data.keys().hasAll(['userId', 'title', 'completed', 'createdAt'])
-        && data.keys().size() >= 4;
+        && data.keys().hasAll(['userId', 'title', 'completed', 'createdAt']);
     }
 
     // 1. users collection
     match /users/{userId} {
       allow read: if true;
-      allow write: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
+      allow delete: if isSignedIn() && isOwner(userId);
     }
 
     // 2. exercises collection
     match /exercises/{exerciseId} {
       allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
-      allow write: if isSignedIn() && (request.resource == null || request.resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidExercise(incoming());
+      allow update: if isSignedIn() && isOwner(existing().userId) && isValidExercise(incoming());
+      allow delete: if isSignedIn() && isOwner(existing().userId);
     }
   }
 }
