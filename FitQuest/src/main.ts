@@ -210,6 +210,19 @@ async function initializeUser(user: any) {
     const userSnap: any = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!userSnap.exists()) {
+      // Si el documento no existe y es un invitado, verificamos si es una cuenta "viva"
+      // para evitar recrear perfiles que han sido borrados de la base de datos
+      if (user.isAnonymous) {
+        const creationTime = user.metadata.creationTime ? new Date(user.metadata.creationTime).getTime() : 0;
+        const isNewSession = (Date.now() - creationTime) < 60000; // 1 minuto de margen
+        
+        if (!isNewSession) {
+          console.log('Detectado perfil de invitado borrado, forzando logout para limpiar sesión.');
+          await signOut(auth);
+          return;
+        }
+      }
+
       console.log('Creando nuevo usuario en Firestore...');
       const initialXP = user.isAnonymous ? 100 : 500;
       const initialData = {
@@ -334,10 +347,18 @@ function syncRanking() {
   
   const unsub = onSnapshot(q, (snapshot) => {
     elements.rankingList.innerHTML = '';
-    snapshot.docs.forEach((doc, index) => {
-      const user = doc.data();
-      const isMe = auth.currentUser?.uid === doc.id;
-      const rank = index + 1;
+    let rankCounter = 0;
+    
+    snapshot.docs.forEach((docSnapshot) => {
+      const user = docSnapshot.data();
+      
+      // Omitimos invitados que no han progresado (XP inicial = 100)
+      // Esto limpia el ranking de perfiles "huérfanos" o accidentales
+      if (user.isGuest && user.xp <= 100) return;
+      
+      rankCounter++;
+      const isMe = auth.currentUser?.uid === docSnapshot.id;
+      const rank = rankCounter;
       
       const item = document.createElement('div');
       const delay = rank <= 5 ? `delay-${rank * 100}` : '';
@@ -356,6 +377,10 @@ function syncRanking() {
       `;
       elements.rankingList.appendChild(item);
     });
+
+    if (rankCounter === 0) {
+      elements.rankingList.innerHTML = '<p class="text-center text-white/20 py-8 italic">Aún no hay leyendas en el ranking.</p>';
+    }
   }, (err) => {
     console.warn('Listener de Ranking interrumpido:', err.message);
   });
